@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>McKenzie Friends — Travis Lee Swift · Court Support</title>
+<meta name="description" content="Court support and case preparation for litigants in person in England & Wales, with Travis Lee Swift.">
+<meta name="theme-color" content="#16202e">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="McKenzie Friends">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!--
+  McKenzie Friends — installable PWA (app-shell + sidebar).
+  Files: index.html · manifest.webmanifest · sw.js · icon-192/512/maskable.png
+  Serve over https or localhost for install + offline (service workers don't run from file://).
+  AI runs on Qwen via any OpenAI-compatible endpoint (Office → Connectors). Guardrails preserved verbatim.
+  Small print (front-end-only limits): a browser-side API key is visible to visitors (proxy it for a public
+  site; local Ollama needs none); storage is this-device localStorage (a Supabase backend is the production step);
+  "take over" = review + flag, not live hand-over.
+-->
+<style>
+  :root{
+    --ink:#141d29;--ink-2:#1e2a37;--ink-3:#26333f;--paper:#e9eae4;--surface:#fbfbf8;--surface-2:#f1f2ec;
+    --oxblood:#7b2d3a;--oxblood-2:#933745;--brass:#9c854f;--brass-2:#b89a5c;--gold:#d9b871;
+    --muted:#59616c;--muted-2:#8a929b;--line:#d6d7cf;--line-dk:#2c3a47;--ok:#3f6d52;--warn:#9c6b1f;
+    --serif:'Spectral',Georgia,serif;--sans:'Inter',system-ui,-apple-system,Segoe UI,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;}html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  button{font-family:var(--sans);cursor:pointer;}
+  a{color:inherit;}
+
+  /* ---------------- APP SHELL ---------------- */
+  .app{display:flex;min-height:100vh;min-height:100dvh;}
+  .sidebar{width:266px;flex:0 0 266px;background:var(--ink);color:#c4ccd4;position:fixed;inset:0 auto 0 0;height:100vh;height:100dvh;display:flex;flex-direction:column;border-right:1px solid var(--line-dk);z-index:40;transition:transform .25s ease;}
+  .sidebar::-webkit-scrollbar{width:8px;}.sidebar::-webkit-scrollbar-thumb{background:#2c3a47;}
+  .side-scroll{overflow-y:auto;flex:1;padding-bottom:14px;}
+  .brand{display:flex;align-items:center;gap:12px;padding:20px 20px 16px;border-bottom:1px solid var(--line-dk);}
+  .brand .wm{display:flex;flex-direction:column;line-height:1;}
+  .brand .wm .t{font-family:var(--serif);font-weight:600;font-size:16.5px;letter-spacing:.14em;color:#f4f5ef;}
+  .brand .wm .s{font-family:var(--mono);font-size:8.5px;letter-spacing:.24em;color:var(--brass-2);margin-top:5px;text-transform:uppercase;}
+  .navgroup{padding:16px 14px 4px;}
+  .navgroup .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted-2);padding:0 8px 8px;}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;color:#c4ccd4;text-align:left;padding:9px 10px;font-size:13.5px;border-left:2px solid transparent;transition:background .12s;}
+  .navitem:hover{background:#1e2a37;color:#eef0ea;}
+  .navitem.active{background:#1e2a37;color:var(--gold);border-left-color:var(--oxblood);}
+  .navitem .bdg{flex:0 0 auto;width:26px;height:26px;border:1px solid #3a4855;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;font-weight:600;color:var(--brass-2);}
+  .navitem.active .bdg{border-color:var(--brass);color:var(--gold);}
+  .navitem .nm{flex:1;min-width:0;}
+  .navitem .nm b{font-weight:600;display:block;font-size:13.5px;}
+  .navitem .nm small{color:var(--muted-2);font-size:11px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .navitem.travis .bdg{border-color:var(--brass);color:var(--gold);background:#0f1620;}
+  .navitem.travis .nm b{color:#f4f5ef;}
+  .side-foot{padding:12px 18px 16px;border-top:1px solid var(--line-dk);font-size:10.5px;color:var(--muted-2);}
+  .side-foot .badge{display:inline-block;font-family:var(--mono);font-size:9px;padding:2px 6px;border:1px solid #3a4855;color:var(--muted-2);margin-top:6px;}
+
+  .main{margin-left:266px;flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topstrip{background:var(--ink-2);color:#cdd4dc;font-size:11.5px;padding:8px 22px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line-dk);}
+  .topstrip b{color:#f0e5c8;}
+  .menu-toggle{display:none;}
+  .view{flex:1;}
+
+  /* ---------------- HOME / MARQUEE ---------------- */
+  .home-wrap{max-width:1000px;margin:0 auto;padding:30px 24px 60px;}
+  .marquee{position:relative;background:radial-gradient(120% 140% at 50% 0%,#1c2836 0%,#0f1620 70%);border:1px solid #2c3a47;padding:30px 26px 34px;text-align:center;overflow:hidden;}
+  .marquee .bulbs{display:flex;gap:12px;justify-content:center;margin-bottom:16px;}
+  .bulb{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px 1px rgba(217,184,113,.8);opacity:.85;}
+  .marquee .practice{font-family:var(--mono);letter-spacing:.42em;font-size:11px;color:#9aa4af;text-transform:uppercase;margin-bottom:14px;}
+  .marquee .name{font-family:var(--serif);font-weight:600;font-size:clamp(30px,6.4vw,62px);letter-spacing:.05em;color:var(--gold);line-height:1.02;margin:0;
+    text-shadow:0 0 22px rgba(184,154,92,.55), 0 0 4px rgba(217,184,113,.85);}
+  .marquee .role{font-family:var(--serif);font-style:italic;font-size:clamp(14px,2.4vw,19px);color:#c8b58a;margin-top:12px;}
+  .marquee .kicker{font-size:13.5px;color:#aeb7c0;max-width:560px;margin:14px auto 0;}
+  .marquee .m-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:22px;}
+  @keyframes tw{0%,100%{opacity:.85;}50%{opacity:.35;}}
+  .bulb:nth-child(2n){animation:tw 2.4s infinite;}.bulb:nth-child(3n){animation:tw 3.1s infinite .4s;}
+
+  .btn{border:none;font-weight:600;font-size:14px;padding:13px 22px;}
+  .btn-gold{background:var(--brass);color:#141d29;}.btn-gold:hover{background:var(--brass-2);}
+  .btn-blood{background:var(--oxblood);color:#fdf6ee;}.btn-blood:hover{background:var(--oxblood-2);}
+  .btn-ghost{background:none;border:1px solid var(--ink);color:var(--ink);}.btn-ghost:hover{background:var(--surface-2);}
+  .btn-ghost-d{background:none;border:1px solid #47525f;color:#dfe4ea;}.btn-ghost-d:hover{background:#26333f;}
+
+  .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0 6px;}
+  .flowcard{background:var(--surface);border:1px solid var(--line);padding:18px;}
+  .flowcard .n{font-family:var(--mono);font-size:11px;color:var(--oxblood);letter-spacing:.1em;}
+  .flowcard h4{font-family:var(--serif);font-size:16px;margin:8px 0 5px;}
+  .flowcard p{font-size:13px;color:var(--muted);margin:0;}
+
+  .sec-head{margin:40px 0 16px;}
+  .sec-head .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--oxblood);}
+  .sec-head h3{font-family:var(--serif);font-weight:500;font-size:25px;margin:6px 0 4px;}
+  .sec-head p{color:var(--muted);font-size:14px;margin:0;max-width:640px;}
+
+  .stars{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));}
+  .star{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--oxblood);padding:16px;display:flex;flex-direction:column;transition:transform .16s,box-shadow .16s;text-align:left;}
+  .star:hover{transform:translateY(-3px);box-shadow:0 14px 30px -18px rgba(20,29,41,.55);}
+  .star.appeal{border-top-color:var(--brass);}
+  .star .h{display:flex;gap:11px;align-items:center;margin-bottom:9px;}
+  .star .b{width:40px;height:40px;border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:19px;font-weight:600;background:var(--surface-2);}
+  .star.appeal .b{border-color:var(--brass);color:var(--brass);}
+  .star h4{font-family:var(--serif);font-size:17px;margin:0;font-weight:600;}
+  .star .role{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--oxblood);font-weight:600;}
+  .star.appeal .role{color:var(--brass);}
+  .star p{font-size:12.5px;color:#2c3742;margin:0 0 12px;flex:1;}
+  .star .go{margin-top:auto;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);font-weight:600;font-size:12.5px;padding:9px 12px;display:flex;justify-content:space-between;}
+  .star .go:hover{border-color:var(--oxblood);color:var(--oxblood);}
+
+  /* ---------------- CHAT VIEW ---------------- */
+  .vhead{background:var(--surface);border-bottom:1px solid var(--line);padding:16px 24px;display:flex;align-items:center;gap:13px;position:sticky;top:0;z-index:5;}
+  .vhead .b{width:38px;height:38px;border:1.5px solid var(--brass);color:var(--brass);font-family:var(--serif);font-size:18px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+  .vhead h2{font-family:var(--serif);font-size:19px;margin:0;font-weight:600;}
+  .vhead .r{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
+  .vhead .acts{margin-left:auto;display:flex;gap:8px;}
+  .chip{background:var(--surface-2);border:1px solid var(--line);color:var(--ink);font-size:12px;padding:7px 11px;}
+  .chip:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .chip.gold{background:var(--oxblood);border-color:var(--oxblood);color:#fdf6ee;}.chip.gold:hover{background:var(--oxblood-2);color:#fff;}
+  .chatwrap{display:flex;flex-direction:column;height:calc(100vh - 41px);height:calc(100dvh - 41px);}
+  .stream{flex:1;overflow-y:auto;padding:22px 20px 10px;}
+  .stream-inner{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:13px;}
+  .msg{max-width:82%;padding:12px 15px;font-size:14.5px;animation:rise .25s ease;}
+  @keyframes rise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .msg.me{align-self:flex-end;background:var(--ink);color:#f2f4ef;}
+  .msg.ai{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--oxblood);}
+  .msg .tag{display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--oxblood);font-weight:600;margin-bottom:5px;}
+  .msg.ai p{margin:0 0 8px;}.msg.ai p:last-child{margin:0;}
+  .empty{text-align:center;color:var(--muted);max-width:520px;margin:24px auto;}
+  .starter{background:var(--surface-2);border:1px solid var(--line);font-size:13px;color:var(--ink-2);padding:9px 12px;margin:6px 5px 0;display:inline-block;}
+  .starter:hover{border-color:var(--oxblood);}
+  .composer{border-top:1px solid var(--line);background:var(--surface);padding:13px 20px;}
+  .composer-inner{max-width:760px;margin:0 auto;display:flex;gap:10px;align-items:flex-end;}
+  textarea{flex:1;resize:none;font-family:var(--sans);font-size:14.5px;line-height:1.5;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:11px 13px;min-height:46px;max-height:150px;}
+  textarea:focus{outline:2px solid var(--oxblood);outline-offset:1px;}
+  .send{background:var(--oxblood);color:#fdf6ee;border:none;font-weight:600;font-size:14px;padding:0 20px;height:46px;}
+  .send:disabled{opacity:.5;}
+  .foot-note{max-width:760px;margin:8px auto 0;font-size:11px;color:var(--muted);text-align:center;}
+  .dots span{display:inline-block;width:6px;height:6px;background:var(--oxblood);border-radius:50%;margin:0 2px;animation:blink 1.2s infinite;}
+  .dots span:nth-child(2){animation-delay:.2s;}.dots span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.25;}40%{opacity:1;}}
+
+  /* ---------------- GENERIC PANE ---------------- */
+  .pane{max-width:900px;margin:0 auto;padding:28px 24px 60px;}
+  .pane h1{font-family:var(--serif);font-weight:600;font-size:28px;margin:0 0 6px;}
+  .pane .lead{color:var(--muted);font-size:14.5px;margin:0 0 22px;max-width:620px;}
+
+  /* travis profile */
+  .tv-hero{display:grid;grid-template-columns:150px 1fr;gap:26px;align-items:start;margin-bottom:12px;}
+  .portrait{width:150px;height:186px;background:linear-gradient(160deg,#26333f,#141d29);border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;position:relative;}
+  .portrait .init{font-family:var(--serif);font-size:60px;color:var(--brass);}
+  .portrait .ribbon{position:absolute;top:9px;left:-1px;background:var(--oxblood);color:#fff;font-size:9px;letter-spacing:.12em;padding:3px 8px;text-transform:uppercase;}
+  .tv-hero .tag{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--muted);margin:2px 0 14px;}
+  .tv-hero p{font-size:14.5px;color:#2c3742;margin:0 0 12px;max-width:560px;}
+  .placeholder{background:#f6ecd5;border-bottom:1px dashed var(--brass);padding:0 3px;color:#6b5a2a;font-style:italic;}
+  .cred{display:flex;gap:26px;flex-wrap:wrap;margin:16px 0;}
+  .cred .n{font-family:var(--serif);font-size:26px;color:var(--oxblood);line-height:1;}
+  .cred .l{font-size:12px;color:var(--muted);}
+  .role-note{font-size:12.5px;color:var(--muted);margin-top:14px;max-width:620px;}
+
+  /* pricing */
+  .prices{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));}
+  .price{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--brass);padding:18px;display:flex;flex-direction:column;}
+  .price.free{border-top-color:var(--ink);}
+  .price h4{font-family:var(--serif);font-size:18px;margin:0 0 3px;font-weight:600;}
+  .price .amt{font-family:var(--serif);font-size:28px;color:var(--oxblood);margin:6px 0 2px;}
+  .price .per{font-size:12px;color:var(--muted);}
+  .price .d{font-size:13px;color:#2c3742;margin:12px 0 16px;flex:1;}
+  .price button{margin-top:auto;background:var(--ink);color:#eef0ea;border:none;font-weight:600;font-size:13.5px;padding:11px;}
+  .price.free button{background:var(--oxblood);}
+
+  /* booking */
+  .book-inner{max-width:560px;}
+  .step-label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--oxblood);margin-bottom:6px;}
+  .book-inner h3{font-family:var(--serif);font-weight:500;font-size:22px;margin:0 0 16px;}
+  .svc-opt{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--line);padding:14px 16px;margin-bottom:10px;}
+  .svc-opt:hover,.svc-opt.sel{border-color:var(--oxblood);}
+  .svc-opt .amt{font-family:var(--serif);font-size:20px;color:var(--oxblood);}
+  .svc-opt .n{font-weight:600;}
+  .slots{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+  .slot{background:var(--surface);border:1px solid var(--line);font-size:13px;padding:9px 12px;}
+  .slot:hover,.slot.sel{border-color:var(--oxblood);color:var(--oxblood);}.slot.sel{background:#f6ecd5;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;}
+  .field input,.field textarea{width:100%;border:1px solid var(--line);background:var(--surface);padding:10px 12px;font-family:var(--sans);font-size:14px;}
+  .field .hint{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .summary-box{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--brass);padding:16px;margin-bottom:18px;font-size:14px;}
+  .summary-box .l{color:var(--muted);font-size:12px;}
+  .book-actions{display:flex;justify-content:space-between;gap:12px;margin-top:20px;}
+  .confirm-tick{width:56px;height:56px;border:2px solid var(--oxblood);border-radius:50%;color:var(--oxblood);font-size:28px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:var(--serif);}
+
+  /* office */
+  .otabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:22px;}
+  .otab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:13px;font-weight:600;padding:11px 14px;font-family:var(--mono);letter-spacing:.02em;}
+  .otab:hover{color:var(--ink);}.otab.active{color:var(--oxblood);border-bottom-color:var(--oxblood);}
+  .stat-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));margin-bottom:22px;}
+  .stat{background:var(--surface);border:1px solid var(--line);padding:16px;}
+  .stat .num{font-family:var(--serif);font-size:32px;color:var(--ink);line-height:1;}
+  .stat .lab{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+  .panel{background:var(--surface);border:1px solid var(--line);padding:18px;margin-bottom:18px;}
+  .panel h4{font-family:var(--serif);font-size:18px;margin:0 0 4px;}
+  .panel .sub{font-size:12.5px;color:var(--muted);margin:0 0 14px;}
+  .otable{width:100%;border-collapse:collapse;font-size:13px;}
+  .otable th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding:8px;font-weight:500;}
+  .otable td{border-bottom:1px solid var(--line);padding:9px 8px;vertical-align:top;}
+  .otable tr:hover td{background:var(--surface-2);}
+  .status-pill{font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;}
+  .linkbtn{background:none;border:none;color:var(--oxblood);font-size:12.5px;font-weight:600;padding:0;text-decoration:underline;}
+  .oform label{display:block;font-size:12.5px;font-weight:600;margin:14px 0 5px;}
+  .oform input,.oform select,.oform textarea{width:100%;border:1px solid var(--line);background:var(--paper);padding:10px 12px;font-family:var(--sans);font-size:14px;}
+  .oform .mono{font-family:var(--mono);font-size:13px;}
+  .oform .hint{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .save-row{display:flex;gap:10px;align-items:center;margin-top:18px;}
+  .saved-flash{color:var(--ok);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .2s;}.saved-flash.show{opacity:1;}
+  .check-item{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line);}
+  .check-item:last-child{border-bottom:none;}
+  .check-box{flex:0 0 auto;width:20px;height:20px;border:1.5px solid var(--muted);margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;}
+  .check-item.done .check-box{background:var(--ok);border-color:var(--ok);}
+  .check-item .ct{font-size:13.5px;font-weight:600;}.check-item.done .ct{color:var(--muted);text-decoration:line-through;}
+  .check-item .cd{font-size:12px;color:var(--muted);margin-top:2px;}
+  .badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:3px 7px;border:1px solid var(--line);color:var(--muted);}
+  .badge.on{color:var(--ok);border-color:var(--ok);}.badge.off{color:var(--warn);border-color:var(--warn);}
+  .transcript{background:var(--paper);border:1px solid var(--line);padding:14px;max-height:340px;overflow-y:auto;font-size:13px;}
+  .tmsg{margin-bottom:11px;}.tmsg .who{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .tmsg.assistant .who{color:var(--oxblood);}
+  .login-box{max-width:340px;margin:50px auto;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--brass);padding:26px;text-align:center;}
+  .login-box h3{font-family:var(--serif);margin:0 0 6px;}
+  .login-box p{font-size:12.5px;color:var(--muted);margin:0 0 16px;}
+  .login-box input{width:100%;border:1px solid var(--line);padding:11px;font-size:15px;text-align:center;letter-spacing:.2em;font-family:var(--mono);margin-bottom:12px;}
+
+  .scrim{display:none;}
+  /* ---------------- ACCESSIBILITY & POLISH ---------------- */
+  .skip{position:absolute;left:-9999px;top:8px;z-index:100;background:var(--ink);color:#fff;padding:10px 14px;font-weight:600;}
+  .skip:focus{left:8px;}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .main :focus-visible{outline-color:var(--oxblood);}
+  button:disabled{cursor:not-allowed;}
+  .svc-opt{width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;}
+  .check-item{cursor:pointer;width:100%;background:none;border:none;border-bottom:1px solid var(--line);text-align:left;font:inherit;color:inherit;}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .otable{min-width:560px;}
+  .composer{padding-bottom:calc(13px + env(safe-area-inset-bottom));}
+  .sidebar{padding-top:env(safe-area-inset-top);}
+  /* chat fills the screen under the top strip, whatever the strip's height */
+  body.chat-mode .main{height:100vh;height:100dvh;}
+  body.chat-mode .view{min-height:0;display:flex;flex-direction:column;}
+  body.chat-mode .chatwrap{flex:1;min-height:0;height:auto;}
+  .offline-note{display:none;background:var(--warn);color:#fff;font-size:12px;padding:6px 22px;text-align:center;}
+  body.offline .offline-note{display:block;}
+  /* ---------------- RESPONSIVE ---------------- */
+  @media (max-width:880px){
+    .sidebar{transform:translateX(-100%);box-shadow:0 0 40px rgba(0,0,0,.4);}
+    body.nav-open .sidebar{transform:none;}
+    .main{margin-left:0;}
+    .menu-toggle{display:flex;align-items:center;gap:8px;position:fixed;top:10px;left:12px;z-index:45;background:var(--ink);color:#eef0ea;border:1px solid var(--line-dk);padding:9px 13px;font-weight:600;font-size:13px;}
+    .topstrip{padding-left:120px;}
+    body.nav-open .scrim{display:block;position:fixed;inset:0;background:rgba(10,15,22,.5);z-index:35;}
+    .flow{grid-template-columns:1fr;}
+    .tv-hero{grid-template-columns:1fr;}.portrait{width:120px;height:150px;}
+    .vhead{flex-wrap:wrap;padding:12px 16px;}
+    .vhead .acts{margin-left:0;width:100%;flex-wrap:wrap;}
+    .msg{max-width:92%;}
+    .home-wrap,.pane{padding-left:16px;padding-right:16px;}
+    /* 16px stops iOS zooming into form fields */
+    textarea,.field input,.field textarea,.oform input,.oform select,.oform textarea,.login-box input{font-size:16px;}
+  }
+  @media (max-width:480px){
+    .stars{grid-template-columns:1fr;}
+    .book-actions{flex-direction:column-reverse;}
+    .book-actions .btn{width:100%;}
+    .marquee{padding:24px 16px 28px;}
+    .marquee .practice{letter-spacing:.24em;}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+<a class="skip" href="#view">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <g id="seal" fill="none" stroke="#b89a5c" stroke-linecap="round">
+    <circle cx="24" cy="24" r="22" stroke-width="1.4"/>
+    <circle cx="24" cy="24" r="18.2" stroke-width=".7" opacity=".6"/>
+    <line x1="24" y1="12.5" x2="24" y2="33" stroke-width="1.5"/>
+    <line x1="13.5" y1="16.5" x2="34.5" y2="16.5" stroke-width="1.5"/>
+    <circle cx="24" cy="12.5" r="1.7" fill="#b89a5c" stroke="none"/>
+    <path d="M13.5 16.5 L10 24 A4 4 0 0 0 17 24 Z" stroke-width="1.1"/>
+    <path d="M34.5 16.5 L31 24 A4 4 0 0 0 38 24 Z" stroke-width="1.1"/>
+    <line x1="18.5" y1="33" x2="29.5" y2="33" stroke-width="1.5"/>
+    <line x1="24" y1="33" x2="24" y2="35" stroke-width="1.5"/>
+  </g>
+</defs></svg>
+
+<button class="menu-toggle" id="menuToggle" onclick="toggleNav()" aria-controls="sidebar" aria-expanded="false"><span aria-hidden="true">☰</span> Menu</button>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#seal"/></svg>
+      <div class="wm"><span class="t">MCKENZIE FRIENDS</span><span class="s">Court Support · E&amp;W</span></div>
+    </div>
+    <nav class="side-scroll" id="sideNav" aria-label="Sections"></nav>
+    <div class="side-foot">
+      A McKenzie friend is <b style="color:#c8b58a">not a solicitor</b>. Information &amp; preparation only — not privileged.
+      <br><span class="badge" id="storeBadge">storage</span>
+    </div>
+  </aside>
+  <div class="scrim" onclick="toggleNav(false)" aria-hidden="true"></div>
+
+  <div class="main">
+    <div class="offline-note" role="status">You're offline. The app still opens, but the AI specialists need a connection.</div>
+    <div class="topstrip" role="note"><b>Not a solicitor.</b>&nbsp;AI specialists give information &amp; case preparation only; conversations are not privileged. Sessions with Travis are support, not legal representation.</div>
+    <main class="view" id="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<script>
+/* ================= STORAGE ================= */
+const DB=(function(){const mem={};let hasLS=false;
+  try{localStorage.setItem('__t','1');localStorage.removeItem('__t');hasLS=true;}catch(e){}
+  return{persistent:hasLS,
+    get(k,d){try{if(hasLS){const v=localStorage.getItem('mf_'+k);return v==null?d:JSON.parse(v);}}catch(e){}return(k in mem)?mem[k]:d;},
+    set(k,v){try{if(hasLS){localStorage.setItem('mf_'+k,JSON.stringify(v));return;}}catch(e){}mem[k]=v;}};
+})();
+
+/* ================= CONFIG ================= */
+const DEFAULT_FOUNDER={name:"Travis Lee Swift",initial:"T",tag:"Been in the dock. Ran my own defence. Know the courtroom from the inside.",years:"[X]",supported:"[X]"};
+const DEFAULT_PRICING=[
+  {id:"ai",free:true,name:"Talk to a specialist",amount:"Free",per:"AI, available now",desc:"Understand your charge, the guidelines, and your mitigation before you spend a penny."},
+  {id:"c30",name:"30-minute consultation",amount:"£[30]",per:"per session",desc:"One-to-one with Travis. Bring your papers and questions; leave with a plan and next steps."},
+  {id:"c60",name:"60-minute deep-dive",amount:"£[55]",per:"per session",desc:"For serious or complex matters — a full walk-through of your case and how to prepare."},
+  {id:"mit",name:"Written mitigation pack",amount:"£[40]",per:"one-off",desc:"A plain-English mitigation summary you can hand to your solicitor or read to the court."},
+  {id:"day",name:"Court-day companion",amount:"£[POA]",per:"per day",desc:"Travis attends as your McKenzie friend to assist you on the day (subject to the court's permission)."}
+];
+const DEFAULT_CFG={ai:{preset:"claude",base:"https://api.anthropic.com",model:"claude-sonnet-4-6",key:"",temperature:0.4},bookingWebhook:"",notifyWebhook:"",passcode:"office"};
+const AI_PRESETS={
+  claude:{base:"https://api.anthropic.com",model:"claude-sonnet-4-6",key:"",note:"TESTING ONLY — runs on Claude with no key WHILE you preview this app inside Claude. It will NOT work on your own hosting. For your real site, switch to Ollama/Qwen, or add your own key behind a server."},
+  ollama:{base:"http://localhost:11434/v1",model:"qwen2.5:14b",key:"",note:"Local & fully open-source. `ollama pull qwen2.5:14b`; for browser calls set OLLAMA_ORIGINS."},
+  openrouter:{base:"https://openrouter.ai/api/v1",model:"qwen/qwen-2.5-72b-instruct",key:"",note:"Hosted Qwen. Needs a key — keep it server-side for a public site."},
+  dashscope:{base:"https://dashscope-intl.aliyuncs.com/compatible-mode/v1",model:"qwen-plus",key:"",note:"Alibaba's Qwen API (OpenAI-compatible). Needs a key."},
+  custom:{base:"",model:"",key:"",note:"Any OpenAI-compatible endpoint: vLLM, LM Studio, Together, your own proxy…"}
+};
+const founder=()=>DB.get('founder',DEFAULT_FOUNDER);
+const pricing=()=>DB.get('pricing',DEFAULT_PRICING);
+const cfg=()=>Object.assign({},DEFAULT_CFG,DB.get('cfg',{}));
+
+/* ================= GUARDRAILS (verbatim) ================= */
+const GUARDRAILS=`You are an AI legal-information specialist for "McKenzie Friends", an unregulated McKenzie-friend and case-preparation service in England & Wales run by Travis Lee Swift. The human McKenzie friend clients can book is Travis. Absolute rules that override everything:
+- You are NOT a solicitor or barrister. You give legal INFORMATION and case PREPARATION only. You are not regulated; this conversation is NOT privileged. Say so when it matters.
+- Frame guidance as "raise this with your own solicitor" — never "instead of your solicitor".
+- Never invent or guess a legal citation, case name or paragraph number — a wrong reference can hurt a client. You may cite and briefly quote sources you're sure of (statute, Sentencing Council guidelines, CPS guidance, PACE codes, the Criminal Procedure Rules, and practitioner texts such as Archbold, with attribution) — just don't reproduce long passages. If unsure of an exact reference, explain the point plainly and suggest they confirm it with their solicitor.
+- NEVER help fabricate a defence, coach a false or tailored account, shape an alibi, or manufacture evidence. Only help identify weaknesses in the PROSECUTION case.
+- NEVER give immigration advice (a separate criminal offence unregulated). Decline and refer to a solicitor or IAA-registered adviser.
+- If liberty is at stake or the person seems vulnerable, urge them to get a regulated solicitor, the duty solicitor, or legal aid as a priority.
+- ROUTING: when the person would benefit from hands-on help — a court-day companion, preparing mitigation to present, or simply someone experienced beside them — point them to booking time with Travis, e.g. "This is where Travis can help in person — you can book time from this app." Keep it natural, never pushy.
+- Your job is to help and to give realistic hope: lead with what CAN be done, be warm and encouraging, and don't lecture or pile on warnings. Be plain-English, non-judgmental and focused. Never guarantee an outcome — but never leave someone feeling hopeless either.`;
+
+/* ================= AGENTS (owner's 8 preserved verbatim; Quinn added) ================= */
+const AGENTS=[
+  {initial:"M",name:"Marlowe",role:"Crown Court & Trial Prep",appeal:false,bio:"Marlowe is an AI specialist, not a lawyer. It covers indictable and serious either-way cases sent to the Crown Court and what a jury trial actually involves.",focus:"Crown Court procedure, jury trial, plea decisions.",grounded:"CrimPR, CPS guidance, PACE codes.",helps:"What each hearing means, what your barrister needs, questions on the Crown's case.",limit:"Won't assess your odds or draft trial arguments.",system:"SPECIALTY: Crown Court and trial preparation — procedure (sending, PTPH, case management, trial), plea decisions at a high level, preparing questions for counsel. You don't run the defence or predict verdicts."},
+  {initial:"P",name:"Petra",role:"Magistrates' Court & First Hearings",appeal:false,bio:"Petra is an AI specialist, not a lawyer. It handles the magistrates' court — first appearances, bail, allocation — the stage people feel most rushed.",focus:"First hearings, allocation, bail, magistrates' sentencing.",grounded:"MCA 1980, CrimPR, Sentencing Council guidelines.",helps:"Whether a case stays or goes up, how bail works, the 12-month sentencing power (since Nov 2024).",limit:"Won't tell you how to plead.",system:"SPECIALTY: Magistrates' court and first hearings — summary/either-way/indictable-only, plea before venue and allocation, bail, and current magistrates' sentencing powers (up to 12 months for a single either-way offence since 18 November 2024). Flag when to demand the duty solicitor."},
+  {initial:"F",name:"Ferris",role:"Fraud & Financial Crime",appeal:false,bio:"Ferris is an AI specialist, not a lawyer. It focuses on fraud and financial crime — cases that turn on documents, disclosure and money-trails.",focus:"Fraud, false accounting, money laundering, confiscation.",grounded:"Fraud Act 2006, POCA 2002, CPS economic-crime guidance.",helps:"Understanding the charge, chasing unused material, how confiscation works.",limit:"Won't interpret your accounts or advise on hiding assets.",system:"SPECIALTY: Fraud and financial crime — Fraud Act 2006, false accounting, money laundering, POCA confiscation, and (a key battleground) disclosure and unused material. Never advise on concealing assets."},
+  {initial:"C",name:"Cole",role:"Drugs & Importation",appeal:false,bio:"Cole is an AI specialist, not a lawyer. It covers drug and importation offences, where sentence turns on drug category and the role the court decides you played.",focus:"Supply, production, importation.",grounded:"Misuse of Drugs Act 1971, Sentencing Council drug guidelines.",helps:"How guidelines grade harm (class/quantity) and role (leading/significant/lesser).",limit:"Won't help minimise involvement in ongoing activity.",system:"SPECIALTY: Drug offences and importation — MDA 1971 and importation, and how the drug sentencing guidelines categorise HARM (class/quantity) and CULPABILITY (leading/significant/lesser role). Never assist ongoing offending."},
+  {initial:"V",name:"Vaughn",role:"Serious Violence",appeal:false,bio:"Vaughn is an AI specialist, not a lawyer. It works on violence — from common assault up to wounding and GBH — and the defences that decide them.",focus:"Assault ladder, ABH, GBH (ss.18 & 20), self-defence.",grounded:"OAPA 1861, self-defence law, assault guidelines.",helps:"s.18 vs s.20, how self-defence is assessed, what intent and injury mean.",limit:"Won't script an account for you.",system:"SPECIALTY: Serious violence — the assault ladder (common assault, ABH, s.20, s.18), self-defence and reasonable force, assault sentencing guidelines. Never coach or fabricate an account."},
+  {initial:"R",name:"Rhodes",role:"Road Traffic & Motoring",appeal:false,bio:"Rhodes is an AI specialist, not a lawyer. It covers motoring offences, where procedure and technical points genuinely change outcomes.",focus:"Drink/drug driving, totting, dangerous/careless driving.",grounded:"Road Traffic Act 1988, motoring guidelines.",helps:"Points and totting bans, special reasons, exceptional hardship, sample procedure.",limit:"Won't confirm an argument will succeed on your facts.",system:"SPECIALTY: Road traffic — drink/drug-driving, careless/dangerous driving, totting disqualification, points, 'special reasons' and 'exceptional hardship', sample procedure. Prepare questions for a motoring solicitor."},
+  {initial:"S",name:"Sennett",role:"Sentencing & Mitigation",appeal:false,bio:"Sennett is an AI specialist, not a lawyer. It helps you understand exactly how a judge builds your sentence, using the same public guidelines the court must follow.",focus:"Guidelines, categorisation, mitigation, plea credit.",grounded:"Sentencing Act 2020, Sentencing Council guidelines.",helps:"Your offence category and starting point, aggravating/mitigating factors, guilty-plea credit.",limit:"Won't promise a number.",system:"SPECIALTY: Sentencing and mitigation (your core strength). Walk people through the relevant Sentencing Council guideline step by step: category (harm/culpability), starting point/range, aggravating/mitigating factors, totality, and guilty-plea reduction (up to one third, tapering). Help assemble genuine personal mitigation. When they'd benefit from presenting mitigation, point them to booking Travis. Never guarantee an outcome."},
+  {initial:"A",name:"Ada",role:"Unsafe Convictions & the CCRC",appeal:true,bio:"Ada is an AI specialist, not a lawyer. It deals with convictions people believe are wrong — the miscarriage-of-justice route, the deadlines that catch people out, and the high bar to overturn a verdict.",focus:"Appeals against conviction, the CCRC, the 'unsafe' test.",grounded:"Criminal Appeal Act 1968 (s.2), CAA 1995, CrimPR.",helps:"The route and deadline to the Court of Appeal (28 days), and the CCRC's 'real possibility' test.",limit:"Won't judge if your grounds will win, or help create 'new' evidence.",system:"SPECIALTY: Unsafe convictions and the miscarriage-of-justice route (distinct from Quinn, who covers ordinary appeals and challenging the case). Cover: Crown Court→Court of Appeal against CONVICTION (leave needed, 28 days of conviction, the test is 'unsafe' under s.2 CAA 1968); then the CCRC (no deadline but needs a 'real possibility' the conviction is unsafe and generally new evidence or argument). Note the CCRC is under major reform post-Malkinson (interim chair Dame Vera Baird KC leading a review to Dec 2026) — advise checking its current position and getting specialist appeal help. Never help manufacture fresh evidence."},
+  {initial:"Q",name:"Quinn",role:"Appeals & Challenging the Case",appeal:true,bio:"Quinn is an AI specialist, not a lawyer. It's about fighting back — appealing a sentence you say is too harsh, the rehearing route when the magistrates got it wrong, and challenging the charge itself.",focus:"Appeals against sentence, magistrates→Crown Court rehearings, challenging charges.",grounded:"Magistrates' Courts Act 1980, Senior Courts Act 1981, CrimPR.",helps:"The 15-business-day rehearing route, appealing a sentence as too harsh, abuse-of-process and defective-charge points.",limit:"Won't judge whether your appeal will succeed, or invent grounds.",system:"SPECIALTY: Appeals and challenging the case, distinct from Ada's miscarriage/CCRC route. Cover: appeal from the magistrates' court to the Crown Court (automatic, notice within 15 business days of sentence, a full REHEARING — warn the Crown Court can re-sentence up to its own powers, so an appeal can carry risk); appeal against SENTENCE as manifestly excessive; and challenging the charge or process (abuse of process, defective/duplicitous charge, jurisdiction, allocation disputes). Help preserve time limits. Send anyone whose real issue is an unsafe conviction / miscarriage of justice to Ada. Never invent grounds or manufacture evidence — help the person understand and organise a genuine challenge, then get specialist appeal advice."}
+];
+const agentBy=n=>AGENTS.find(a=>a.name===n);
+
+/* ================= ROUTER ================= */
+function route(){ const h=location.hash.replace(/^#\/?/,''); const [v,p]=h.split('/'); return {view:v||'home',param:p?decodeURIComponent(p):null}; }
+function go(view,param){ location.hash='#/'+view+(param?'/'+encodeURIComponent(param):''); }
+window.addEventListener('hashchange',render);
+let pendingBooking=null;
+const TITLE='McKenzie Friends — Travis Lee Swift · Court Support';
+function render(){
+  const {view,param}=route();
+  toggleNav(false);
+  document.body.classList.toggle('chat-mode', view==='agent' && !!agentBy(param));
+  document.getElementById('storeBadge').textContent = DB.persistent?'saved on device':'session only';
+  buildSidebar(view,param);
+  const el=document.getElementById('view');
+  if(view==='home') el.innerHTML=homeView();
+  else if(view==='agent'){ const a=agentBy(param); if(a){renderAgent(a);} else el.innerHTML=homeView(); }
+  else if(view==='travis') el.innerHTML=travisView();
+  else if(view==='pricing') el.innerHTML=pricingView();
+  else if(view==='office') officeView();
+  else el.innerHTML=homeView();
+  const names={travis:founder().name,pricing:'Pricing',office:'The Office'};
+  const a=view==='agent'?agentBy(param):null;
+  document.title=a?`${a.name} · ${a.role} — McKenzie Friends`:(names[view]?`${names[view]} — McKenzie Friends`:TITLE);
+  document.getElementById('view').scrollTop=0; window.scrollTo(0,0);
+  if(view==='travis'&&pendingBooking){bk={service:pendingBooking,slot:null};pendingBooking=null;bkStep(2);const bh=document.getElementById('bookHost');if(bh)bh.scrollIntoView({behavior:'smooth'});}
+}
+
+/* ================= SIDEBAR ================= */
+function buildSidebar(view,param){
+  const nav=document.getElementById('sideNav');
+  const item=(active,onclick,badge,name,sub,extra='')=>`<button class="navitem ${active?'active':''} ${extra}" onclick="${onclick}"${active?' aria-current="page"':''}><span class="bdg" aria-hidden="true">${badge}</span><span class="nm"><b>${name}</b>${sub?`<small>${sub}</small>`:''}</span></button>`;
+  let h='';
+  h+=`<div class="navgroup">`+item(view==='home',"go('home')","▨","Home","The practice")+`</div>`;
+  h+=`<div class="navgroup"><div class="lbl">AI Specialists</div>`;
+  AGENTS.forEach(a=>{ h+=item(view==='agent'&&param===a.name,`go('agent','${a.name}')`,a.initial,a.name,a.role); });
+  h+=`</div>`;
+  h+=`<div class="navgroup"><div class="lbl">Your McKenzie Friend</div>`+
+     item(view==='travis',"go('travis')",esc(founder().initial),esc(founder().name),"Book time in person","travis")+`</div>`;
+  h+=`<div class="navgroup"><div class="lbl">Connections</div>`+
+     item(view==='pricing',"go('pricing')","£","Pricing","Packages & fees")+
+     item(view==='office',"go('office')","⌂","The Office","Owner dashboard")+`</div>`;
+  nav.innerHTML=h;
+}
+function toggleNav(force){ const b=document.body; if(force===false)b.classList.remove('nav-open'); else b.classList.toggle('nav-open');
+  const open=b.classList.contains('nav-open'); const t=document.getElementById('menuToggle'); if(t)t.setAttribute('aria-expanded',open?'true':'false');
+  if(open){const first=document.querySelector('#sideNav .navitem');if(first)first.focus();} }
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('nav-open')){toggleNav(false);const t=document.getElementById('menuToggle');if(t)t.focus();}});
+
+/* ================= HOME ================= */
+function homeView(){
+  const f=founder();
+  const appeals=AGENTS.filter(a=>a.appeal), rest=AGENTS.filter(a=>!a.appeal);
+  const starCard=a=>`<button class="star ${a.appeal?'appeal':''}" onclick="go('agent','${a.name}')">
+      <div class="h"><div class="b" aria-hidden="true">${a.initial}</div><div><h4>${a.name}</h4><div class="role">${a.role}</div></div></div>
+      <p>${a.bio.replace(/ is an AI specialist, not a lawyer\./,'.')}</p>
+      <div class="go">Speak with ${a.name}<span aria-hidden="true">→</span></div></button>`;
+  return `<div class="home-wrap">
+    <div class="marquee">
+      <div class="bulbs" aria-hidden="true">${'<span class="bulb"></span>'.repeat(9)}</div>
+      <div class="practice">McKenzie Friends · Court Support · England &amp; Wales</div>
+      <h1 class="name">${esc(f.name.toUpperCase())}</h1>
+      <div class="role">${esc(f.tag)}</div>
+      <p class="kicker">Talk to a specialist now — free — and get your bearings. When you need a person who's been in the dock beside you, that's ${esc(f.name.split(' ')[0])}.</p>
+      <div class="m-cta">
+        <button class="btn btn-gold" onclick="go('agent','${appeals[0].name}')">Fight a conviction or sentence</button>
+        <button class="btn btn-ghost-d" onclick="document.getElementById('allstars').scrollIntoView({behavior:'smooth'})">Meet the specialists</button>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flowcard"><div class="n">01</div><h4>Talk to a specialist</h4><p>Free AI desks for each corner of criminal law. No name needed. They explain your situation in plain English.</p></div>
+      <div class="flowcard"><div class="n">02</div><h4>Get prepared</h4><p>Understand the guidelines, your mitigation, the deadlines, and what to ask — organised and ready.</p></div>
+      <div class="flowcard"><div class="n">03</div><h4>Sit down with ${esc(f.name.split(' ')[0])}</h4><p>When it counts, book a real McKenzie friend who's run his own defence to prepare you and stand beside you.</p></div>
+    </div>
+
+    <div class="sec-head"><div class="eyebrow">Fighting back</div><h3>Two specialists for appeals &amp; unsafe convictions</h3>
+      <p>The stage people search for most — and where getting the route and the deadline right matters most.</p></div>
+    <div class="stars">${appeals.map(starCard).join('')}</div>
+
+    <div class="sec-head" id="allstars"><div class="eyebrow">Free AI specialists · powered by open-source Qwen</div><h3>Every desk, ready now</h3>
+      <p>Each knows one corner of criminal law and points you to ${esc(f.name.split(' ')[0])} when it's time for a person.</p></div>
+    <div class="stars">${rest.map(starCard).join('')}</div>
+  </div>`;
+}
+
+/* ================= AGENT CHAT ================= */
+const histories={}; let current=null; let activeConvoId=null;
+function introFor(a){return `Hi, I'm ${a.name} — your specialist for ${a.role.toLowerCase()}. I can help you with ${a.helps.charAt(0).toLowerCase()+a.helps.slice(1)} I'm an AI here to get you prepared and pointed the right way, not a lawyer — so speak as freely as you like. Wherever you're starting from, there's almost always a next step worth taking. So — what's going on?`;}
+function starterFor(a){const m={
+  Marlowe:["What happens at a PTPH?","What does my barrister need from me?"],
+  Petra:["Will my case stay in the magistrates' court?","How does bail work at a first hearing?"],
+  Ferris:["What unused material should I ask for?","How does confiscation work?"],
+  Cole:["How do the guidelines decide my 'role'?","What counts as a lesser role?"],
+  Vaughn:["What's the difference between s.18 and s.20?","How is self-defence assessed?"],
+  Rhodes:["How does exceptional hardship work?","How do totting bans work?"],
+  Sennett:["Help me work out my likely sentence","How much credit does a guilty plea give?"],
+  Ada:["I think my conviction is unsafe — my options?","How does a CCRC application work?"],
+  Quinn:["Can I appeal a sentence that's too harsh?","How does the rehearing appeal work?"]};
+  return m[a.name]||["What can you help me with?"];}
+
+function renderAgent(a){
+  current=a; activeConvoId=convoIds[a.name]||null;
+  if(!histories[a.name]) histories[a.name]=[{role:'assistant',content:introFor(a),intro:true}];
+  document.getElementById('view').innerHTML=`
+    <div class="chatwrap">
+      <div class="vhead"><div class="b" aria-hidden="true">${a.initial}</div>
+        <div><h2>${a.name}</h2><div class="r">AI specialist · ${a.role}</div></div>
+        <div class="acts">
+          <button class="chip" onclick="newConvo()">New</button>
+          <button class="chip" onclick="askMit()">My mitigation</button>
+          <button class="chip gold" onclick="go('travis')">Book ${esc(founder().name.split(' ')[0])} →</button>
+        </div></div>
+      <div class="stream" id="stream"><div class="stream-inner" id="streamInner" role="log" aria-live="polite" aria-label="Conversation with ${a.name}"></div></div>
+      <div class="composer"><div class="composer-inner">
+        <label for="input" class="sr-only">Message ${a.name}</label><textarea id="input" placeholder="Describe your charge or question…" rows="1"></textarea>
+        <button class="send" id="send" onclick="send()">Send</button>
+      </div><div class="foot-note">Replies can be wrong or incomplete. Preparation, not representation. Saved privately in the Office for ${esc(founder().name.split(' ')[0])} to review.</div></div>
+    </div>`;
+  const input=document.getElementById('input');
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+  input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,150)+'px';});
+  drawStream();
+}
+function drawStream(){
+  const h=histories[current.name], hasUser=h.some(m=>m.role==='user');
+  let html=h.map(m=>m.role==='user'?`<div class="msg me">${esc(m.content)}</div>`:`<div class="msg ai"><span class="tag">${current.name}</span>${fmt(m.content)}</div>`).join('');
+  if(!hasUser){const s=starterFor(current);
+    html+=`<div class="empty"><p style="font-size:12.5px">You don't have to give your name. What you write is saved privately in the Office so ${esc(founder().name.split(' ')[0])} can pick up where you left off.</p>
+      <p style="margin-top:10px;color:var(--oxblood);font-weight:600">Not sure where to begin?</p>
+      ${s.map(x=>`<button class="starter" onclick="useStarter(this)">${esc(x)}</button>`).join('')}</div>`;}
+  if(pending[current.name])html+=`<div class="msg ai" id="typing"><span class="tag">${current.name}</span><span class="dots" role="img" aria-label="${current.name} is typing"><span></span><span></span><span></span></span></div>`;
+  const si=document.getElementById('streamInner'); if(!si)return; si.innerHTML=html;
+  const sb=document.getElementById('send'); if(sb)sb.disabled=!!pending[current.name];
+  const st=document.getElementById('stream'); if(st)st.scrollTop=1e9;
+}
+function useStarter(b){const i=document.getElementById('input');i.value=b.textContent;i.dispatchEvent(new Event('input'));i.focus();}
+function newConvo(){ if(!current)return;
+  if(histories[current.name].some(m=>m.role==='user')&&!confirm('Start a new conversation? A fresh session is created; this one stays saved in the Office.'))return;
+  if(pending[current.name])return;
+  histories[current.name]=[{role:'assistant',content:introFor(current),intro:true}];activeConvoId=null;delete convoIds[current.name];drawStream();}
+function askMit(){const i=document.getElementById('input');if(!i)return;i.value="Based on what I've told you, explain my mitigation in plain English — a short summary I could take to my solicitor or bring to a session with Travis.";send();}
+
+async function askQwen(sys,messages){
+  const c=cfg().ai;
+  if(c.preset==='claude'){
+    /* Testing mode: Anthropic Messages API. No key is sent — that only works WHILE running inside Claude.
+       On your own hosting this call will fail; switch preset to Ollama/Qwen or use your own key server-side. */
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:(c.model||'claude-sonnet-4-6'),max_tokens:1000,system:sys,messages:messages})});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    return((d.content||[]).filter(b=>b&&b.type==='text').map(b=>b.text).join('\n')||'').trim();
+  }
+  const base=(c.base||'').replace(/\/+$/,''); if(!base)throw new Error('no-endpoint');
+  const headers={'Content-Type':'application/json'}; if(c.key)headers['Authorization']='Bearer '+c.key;
+  const r=await fetch(base+'/chat/completions',{method:'POST',headers,body:JSON.stringify({model:c.model,messages:[{role:'system',content:sys},...messages],max_tokens:1000,temperature:(c.temperature!=null?c.temperature:0.4)})});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const d=await r.json(); return(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content||'').trim();
+}
+const convoIds={};
+function logConversation(agent){
+  const a=agent||current; if(!a)return;
+  const h=histories[a.name].filter(m=>!m.intro); if(!h.length)return;
+  const convos=DB.get('convos',[]); let rec=convos.find(x=>x.id===convoIds[a.name]);
+  if(!rec){rec={id:'c'+Date.now(),agent:a.name,role:a.role,started:new Date().toISOString(),status:'New',messages:[]};convos.unshift(rec);convoIds[a.name]=rec.id;}
+  rec.messages=h.map(m=>({role:m.role,content:m.content})); rec.updated=new Date().toISOString(); DB.set('convos',convos);
+  if(a===current)activeConvoId=rec.id;
+}
+const pending={};
+async function send(){
+  const input=document.getElementById('input'); if(!input)return;
+  const t=input.value.trim(); const a=current; if(!t||!a||pending[a.name])return;
+  histories[a.name].push({role:'user',content:t}); input.value=''; input.style.height='auto';
+  pending[a.name]=true;
+  drawStream(); logConversation(a);
+  try{
+    const reply=await askQwen(GUARDRAILS+"\n\n"+a.system,histories[a.name].filter(m=>!m.intro).map(m=>({role:m.role,content:m.content})));
+    histories[a.name].push({role:'assistant',content:reply||"Something interrupted that reply. Try again in a moment."});
+  }catch(e){
+    const pre=cfg().ai.preset;
+    histories[a.name].push({role:'assistant',content: !navigator.onLine
+      ?"You seem to be offline. Your message is saved — reconnect and send again."
+      :e.message==='no-endpoint'
+      ?"The AI isn't connected yet. In the Office → Connectors, point it at your Qwen endpoint (a local Ollama works with no key)."
+      :pre==='claude'
+      ?"The AI is still on the Claude testing preset, which only works inside Claude. In the Office → Connectors, switch to your Qwen endpoint (Ollama, OpenRouter, DashScope or your own proxy)."
+      :"That didn't come through — the AI endpoint may be unreachable or blocking browser requests. Check Office → Connectors."});
+  }
+  pending[a.name]=false; logConversation(a);
+  if(current===a&&document.getElementById('streamInner')){drawStream();const i=document.getElementById('input');if(i)i.focus();}
+}
+
+/* ================= TRAVIS + BOOKING ================= */
+let bk={service:null,slot:null};
+function travisView(){
+  const f=founder();
+  return `<div class="pane">
+    <div class="tv-hero">
+      <div class="portrait" aria-hidden="true"><span class="ribbon">Draft profile</span><span class="init">${esc(f.initial)}</span></div>
+      <div>
+        <div class="step-label">Your McKenzie friend</div>
+        <h1>${esc(f.name)}</h1>
+        <div class="tag">${esc(f.tag)}</div>
+        <p>I'm not a solicitor — I'm a McKenzie friend, and I've spent <span class="placeholder">[X] years</span> in and around the criminal courts of England &amp; Wales. I've stood in the dock myself, represented myself as a litigant in person, and I know exactly how it feels to face the system without a map.</p>
+        <p>Since then I've stood beside <span class="placeholder">[number]</span> people as their McKenzie friend — getting them ready to fight their corner and work with their own lawyers.</p>
+        <div class="cred">
+          <div><div class="n">${esc(f.years)}</div><div class="l">years around the courts</div></div>
+          <div><div class="n">${esc(f.supported)}</div><div class="l">people supported</div></div>
+          <div><div class="n">1st</div><div class="l">hand — I've been there</div></div>
+        </div>
+        <button class="btn btn-blood" onclick="startBooking()">Book time with ${esc(f.name.split(' ')[0])}</button>
+        <p class="role-note"><strong>What I can and can't do:</strong> I prepare you, help you understand your case, and can sit beside you in court to assist. I don't have an automatic right of audience, I don't conduct your litigation, and I never replace a solicitor — I work alongside one. Every claim on this page is one I can evidence.</p>
+      </div>
+    </div>
+    <div id="bookHost" style="margin-top:26px" aria-live="polite"></div>
+  </div>`;
+}
+function startBooking(){ bk={service:null,slot:null}; bkStep(1); document.getElementById('bookHost').scrollIntoView({behavior:'smooth'}); }
+function paidServices(){return pricing().filter(p=>!p.free);}
+function slotList(){const out=[],d=new Date();let added=0;
+  while(added<12){d.setDate(d.getDate()+1);const day=d.getDay();if(day===0||day===6)continue;
+    ["10:00","11:30","14:00","15:30"].forEach(t=>out.push(d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+" · "+t));
+    added++;if(out.length>=16)break;} return out.slice(0,16);}
+function bkStep(n){
+  const host=document.getElementById('bookHost'); if(!host)return;
+  if(n===1){ host.innerHTML=`<div class="book-inner"><div class="step-label">Step 1 of 3</div><h3>Which service would you like?</h3>
+    ${paidServices().map(p=>`<button type="button" class="svc-opt${bk.service===p.id?' sel':''}" onclick="bkPick('${p.id}')"><div><div class="n">${esc(p.name)}</div><div style="font-size:12px;color:var(--muted)">${esc(p.per)}</div></div><div class="amt">${esc(p.amount)}</div></button>`).join('')}</div>`; }
+  else if(n===2){ const s=pricing().find(p=>p.id===bk.service);
+    host.innerHTML=`<div class="book-inner"><div class="step-label">Step 2 of 3</div><h3>Pick a time for your ${s?esc(s.name.toLowerCase()):'session'}</h3>
+      <div class="slots">${slotList().map(sl=>`<button type="button" class="slot${bk.slot===sl?' sel':''}" onclick="bkSlot(this)"${bk.slot===sl?' aria-pressed="true"':''}>${sl}</button>`).join('')}</div>
+      <div class="book-actions"><button class="btn btn-ghost" onclick="bkStep(1)">← Change service</button></div></div>`; }
+  else if(n===3){ const s=pricing().find(p=>p.id===bk.service);
+    host.innerHTML=`<div class="book-inner"><div class="step-label">Step 3 of 3</div><h3>Your details</h3>
+      <div class="summary-box"><div class="l">You're booking</div><strong>${s?esc(s.name):''} — ${s?esc(s.amount):''}</strong><br><span class="l">${esc(bk.slot||'')}</span></div>
+      <div class="field"><label for="bName">Your name <span style="color:var(--muted);font-weight:400">(optional)</span></label><input id="bName" autocomplete="name" placeholder="Whatever you'd like me to call you"></div>
+      <div class="field"><label for="bContact">Contact (phone or email)</label><input id="bContact" required aria-describedby="bContactHint" placeholder="So I can confirm your appointment"><div class="hint" id="bContactHint">The only thing I really need, so I can confirm your time.</div></div>
+      <div class="field"><label for="bCharge">Your charge / what you're facing</label><input id="bCharge" placeholder="e.g. s.20 GBH at Crown Court"></div>
+      <div class="field"><label for="bMit">Your mitigation &amp; anything I should know</label><textarea id="bMit" rows="4" placeholder="Personal circumstances, remorse, steps taken, health, work, family."></textarea>
+        <div class="hint">Information for your session — not legal advice, and not privileged.</div></div>
+      <div class="book-actions"><button class="btn btn-ghost" onclick="bkStep(2)">← Change time</button><button class="btn btn-blood" onclick="bkConfirm()">Request appointment</button></div></div>`; }
+  else if(n===4){ const s=pricing().find(p=>p.id===bk.service);
+    host.innerHTML=`<div class="book-inner" style="text-align:center;padding:20px 0"><div class="confirm-tick" aria-hidden="true">✓</div>
+      <h3 style="text-align:center">Request sent</h3>
+      <p style="max-width:440px;margin:0 auto 16px;color:var(--muted)">Thanks — I've got your request for <strong>${s?esc(s.name):''}</strong> at <strong>${esc(bk.slot||'')}</strong>. I'll confirm by your contact details and send payment info. Nothing is charged until the session is confirmed.</p>
+      <button class="btn btn-ghost" onclick="go('home')">Done</button></div>`; }
+}
+function bkPick(id){bk.service=id;bkStep(2);}
+function bkSlot(btn){bk.slot=btn.textContent;document.querySelectorAll('.slot').forEach(x=>x.classList.remove('sel'));btn.classList.add('sel');setTimeout(()=>bkStep(3),160);}
+async function bkConfirm(){
+  const v=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
+  const contact=v('bContact'); if(!contact){alert('Please add a phone or email so I can confirm — your name is optional.');const c=document.getElementById('bContact');if(c)c.focus();return;}
+  const btn=document.querySelector('#bookHost .btn-blood'); if(btn){if(btn.disabled)return;btn.disabled=true;}
+  const s=pricing().find(p=>p.id===bk.service);
+  const enq={id:'e'+Date.now(),created:new Date().toISOString(),status:'New',service:s?s.name:'',amount:s?s.amount:'',slot:bk.slot||'',name:v('bName')||'(not given)',contact,charge:v('bCharge'),mitigation:v('bMit')};
+  const list=DB.get('enquiries',[]);list.unshift(enq);DB.set('enquiries',list);
+  /* Fire both webhooks (booking + notification) without blocking the client; the notification webhook was saved but never used before. */
+  const c=cfg(); [c.bookingWebhook,c.notifyWebhook].filter((u,i,arr)=>u&&arr.indexOf(u)===i).forEach(u=>{try{fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(enq),keepalive:true}).catch(()=>{});}catch(e){}});
+  bkStep(4);
+}
+
+/* ================= PRICING ================= */
+function pricingView(){
+  return `<div class="pane"><h1>Pricing</h1><p class="lead">Start free with the AI specialists. Pay only for ${esc(founder().name.split(' ')[0])}'s time — transparent, fixed, and a fraction of solicitor rates.</p>
+    <div class="prices">${pricing().map(p=>`<div class="price ${p.free?'free':''}"><h4>${esc(p.name)}</h4><div class="amt">${esc(p.amount)}</div><div class="per">${esc(p.per)}</div>
+      <div class="d">${esc(p.desc)}</div><button onclick="${p.free?"go('home')":`bookService('${p.id}')`}">${p.free?'Talk to a specialist':'Book this'}</button></div>`).join('')}</div></div>`;
+}
+function bookService(id){ pendingBooking=id; if(route().view==='travis')render(); else go('travis'); }
+
+/* ================= OFFICE ================= */
+let officeTab='overview';
+const unlocked=()=>{try{return sessionStorage.getItem('mf_office')==='1';}catch(e){return false;}};
+function officeView(){
+  const el=document.getElementById('view');
+  if(!unlocked()){
+    el.innerHTML=`<div class="pane"><div class="login-box">
+      <svg width="40" height="40" viewBox="0 0 48 48" style="margin-bottom:10px" aria-hidden="true" focusable="false"><use href="#seal"/></svg>
+      <h3>The Office</h3><p>Owner access. Default passcode <strong>office</strong> — change it in Connectors.</p>
+      <label for="pw" class="sr-only">Office passcode</label><input id="pw" type="password" autocomplete="current-password" placeholder="passcode" onkeydown="if(event.key==='Enter')tryLogin()">
+      <div id="pwerr" role="alert" style="display:none;color:var(--oxblood);font-size:12px;margin-bottom:10px">Not recognised.</div>
+      <button class="btn btn-blood" style="width:100%" onclick="tryLogin()">Enter</button></div></div>`; return;
+  }
+  const tabs=[['overview','Overview'],['enquiries','Enquiries'],['conversations','Conversations'],['content','Content'],['connectors','Connectors'],['compliance','Compliance']];
+  el.innerHTML=`<div class="pane"><h1>The Office</h1><p class="lead">Your dashboard — enquiries, AI conversation logs, content, connections and compliance.</p>
+    <div class="otabs">${tabs.map(t=>`<button class="otab ${officeTab===t[0]?'active':''}"${officeTab===t[0]?' aria-current="true"':''} onclick="setTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
+    <div id="opane"></div></div>`;
+  paint();
+}
+function tryLogin(){const v=(document.getElementById('pw')||{}).value||'';if(v===cfg().passcode){try{sessionStorage.setItem('mf_office','1');}catch(e){}officeTab='overview';officeView();}else{const e=document.getElementById('pwerr');if(e)e.style.display='block';}}
+function setTab(t){officeTab=t;officeView();}
+function paint(){
+  const p=document.getElementById('opane'); if(!p)return;
+  if(officeTab==='overview')p.innerHTML=oOverview();
+  else if(officeTab==='enquiries')p.innerHTML=oEnquiries();
+  else if(officeTab==='conversations')p.innerHTML=oConversations();
+  else if(officeTab==='content')oContent(p);
+  else if(officeTab==='connectors')oConnectors(p);
+  else if(officeTab==='compliance')oCompliance(p);
+}
+function oOverview(){
+  const enq=DB.get('enquiries',[]),con=DB.get('convos',[]);const msgs=con.reduce((n,c)=>n+c.messages.length,0);
+  const c=cfg().ai,ready=!!c.base;
+  return `<div class="stat-grid">
+    <div class="stat"><div class="num">${enq.length}</div><div class="lab">Enquiries</div></div>
+    <div class="stat"><div class="num">${enq.filter(e=>e.status==='New').length}</div><div class="lab">New</div></div>
+    <div class="stat"><div class="num">${con.length}</div><div class="lab">Conversations</div></div>
+    <div class="stat"><div class="num">${msgs}</div><div class="lab">Messages</div></div>
+    <div class="stat"><div class="num">${con.filter(c=>c.status==='Needs human').length}</div><div class="lab">Flagged</div></div></div>
+    <div class="panel"><h4>AI engine</h4><p class="sub">Where the specialists' answers come from.</p>
+      <div>Endpoint <span class="badge ${ready?'on':'off'}">${ready?'configured':'not set'}</span> <span class="badge">${esc(c.model||'—')}</span> <span class="badge">${esc((c.base||'—').replace(/^https?:\/\//,''))}</span></div>
+      <p class="sub" style="margin-top:10px">Storage: <strong>${DB.persistent?'localStorage (this device)':'in-memory (session only)'}</strong>. For shared, multi-device records, connect a Supabase backend.</p></div>`;
+}
+function oEnquiries(){
+  const enq=DB.get('enquiries',[]);
+  if(!enq.length)return `<div class="panel"><h4>No enquiries yet</h4><p class="sub">Booking requests land here.</p></div>`;
+  return `<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><h4 style="margin:0">Enquiries</h4><p class="sub" style="margin:2px 0 0">Click a status to cycle it. Sensitive case data — handle per your data-protection duties.</p></div><button class="linkbtn" onclick="exportData('enquiries')">Export JSON</button></div>
+    <div class="table-scroll"><table class="otable"><thead><tr><th>When</th><th>Name</th><th>Contact</th><th>Service</th><th>Slot</th><th>Charge</th><th>Status</th></tr></thead><tbody>
+    ${enq.map(e=>`<tr><td>${new Date(e.created).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</td><td>${esc(e.name)}</td><td>${esc(e.contact)}</td><td>${esc(e.service)}<br><span style="color:var(--muted)">${esc(e.amount)}</span></td><td>${esc(e.slot)}</td><td>${esc(e.charge||'—')}${e.mitigation?`<br><button class="linkbtn" onclick="showNotes('${e.id}')">notes</button>`:''}</td><td><button class="status-pill" onclick="cycleEnq('${e.id}')" aria-label="Status: ${esc(e.status)}. Change status">${esc(e.status)}</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function showNotes(id){const e=DB.get('enquiries',[]).find(x=>x.id===id);if(e)alert(e.mitigation||'');}
+function cycleEnq(id){const o=['New','Contacted','Booked','Closed'];const l=DB.get('enquiries',[]);const e=l.find(x=>x.id===id);if(e){e.status=o[(o.indexOf(e.status)+1)%o.length];DB.set('enquiries',l);paint();}}
+function oConversations(){
+  const con=DB.get('convos',[]);
+  if(!con.length)return `<div class="panel"><h4>No conversations yet</h4><p class="sub">Every chat with a specialist is logged here.</p></div>`;
+  return `<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><h4 style="margin:0">Conversations</h4><p class="sub" style="margin:2px 0 0">Review what the AI told a client; flag any that need you.</p></div><button class="linkbtn" onclick="exportData('convos')">Export JSON</button></div>
+    <div class="table-scroll"><table class="otable"><thead><tr><th>When</th><th>Specialist</th><th>Msgs</th><th>Status</th><th></th></tr></thead><tbody>
+    ${con.map(c=>`<tr><td>${new Date(c.started).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</td><td>${esc(c.agent)}<br><span style="color:var(--muted)">${esc(c.role)}</span></td><td>${c.messages.length}</td><td><button class="status-pill" onclick="cycleConvo('${c.id}')" aria-label="Status: ${esc(c.status||'New')}. Change status">${esc(c.status||'New')}</button></td><td><button class="linkbtn" onclick="viewConvo('${c.id}')">Read</button></td></tr>`).join('')}
+    </tbody></table></div><div id="convoView"></div></div>`;
+}
+function cycleConvo(id){const o=['New','Needs human','Handled'];const con=DB.get('convos',[]);const c=con.find(x=>x.id===id);if(c){c.status=o[(o.indexOf(c.status||'New')+1)%o.length];DB.set('convos',con);paint();}}
+function viewConvo(id){const c=DB.get('convos',[]).find(x=>x.id===id);if(!c)return;const v=document.getElementById('convoView');
+  v.innerHTML=`<div style="margin-top:16px"><div class="sub" style="margin-bottom:8px">${esc(c.agent)} · ${new Date(c.started).toLocaleString('en-GB')}</div><div class="transcript">${c.messages.map(m=>`<div class="tmsg ${m.role}"><div class="who">${m.role==='user'?'Client':esc(c.agent)}</div>${fmt(m.content)}</div>`).join('')}</div></div>`;
+  v.scrollIntoView({behavior:'smooth',block:'nearest'});}
+function oContent(p){
+  const f=founder(),pr=pricing();
+  p.innerHTML=`<div class="panel oform"><h4>Your profile</h4><p class="sub">Shown in the marquee and profile. Replace bracketed placeholders with real, evidenceable detail.</p>
+    <label for="f_name">Name (goes in lights)</label><input id="f_name" value="${escA(f.name)}">
+    <label for="f_initial">Portrait initial</label><input id="f_initial" value="${escA(f.initial)}" maxlength="2">
+    <label for="f_tag">Tagline</label><input id="f_tag" value="${escA(f.tag)}">
+    <div style="display:flex;gap:12px"><div style="flex:1"><label for="f_years">Years</label><input id="f_years" value="${escA(f.years)}"></div><div style="flex:1"><label for="f_supported">People supported</label><input id="f_supported" value="${escA(f.supported)}"></div></div>
+    <div class="save-row"><button class="btn btn-blood" onclick="saveFounder()">Save profile</button><span class="saved-flash" id="flashF">Saved ✓</span></div></div>
+  <div class="panel oform"><h4>Pricing</h4><p class="sub">Edit each package. The free AI tier stays first.</p>
+    <div id="priceEdit">${pr.map((x,i)=>`<div style="border:1px solid var(--line);padding:12px;margin-bottom:10px"><div style="display:flex;gap:10px"><div style="flex:2"><label>Name</label><input data-i="${i}" data-k="name" value="${escA(x.name)}"></div><div style="flex:1"><label>Amount</label><input data-i="${i}" data-k="amount" value="${escA(x.amount)}"></div><div style="flex:1"><label>Per</label><input data-i="${i}" data-k="per" value="${escA(x.per)}"></div></div><label>Description</label><input data-i="${i}" data-k="desc" value="${escA(x.desc)}"></div>`).join('')}</div>
+    <div class="save-row"><button class="btn btn-blood" onclick="savePricing()">Save pricing</button><span class="saved-flash" id="flashP">Saved ✓</span></div></div>`;
+}
+function saveFounder(){const g=id=>document.getElementById(id).value;DB.set('founder',{name:g('f_name'),initial:g('f_initial'),tag:g('f_tag'),years:g('f_years'),supported:g('f_supported')});flash('flashF');buildSidebar('office',null);}
+function savePricing(){const pr=JSON.parse(JSON.stringify(pricing()));document.querySelectorAll('#priceEdit input').forEach(inp=>{pr[+inp.dataset.i][inp.dataset.k]=inp.value;});DB.set('pricing',pr);flash('flashP');}
+function oConnectors(p){
+  const c=cfg();
+  p.innerHTML=`<div class="panel oform"><h4>AI engine — Qwen</h4><p class="sub">Any OpenAI-compatible endpoint. Default is a local Ollama (fully open-source, no key).</p>
+    <label for="ai_preset">Preset</label><select id="ai_preset" onchange="applyPreset(this.value)">${Object.keys(AI_PRESETS).map(k=>`<option value="${k}" ${c.ai.preset===k?'selected':''}>${k}</option>`).join('')}</select>
+    <div class="hint" id="ai_note">${esc(AI_PRESETS[c.ai.preset]?AI_PRESETS[c.ai.preset].note:'')}</div>
+    <label for="ai_base">Base URL</label><input class="mono" id="ai_base" value="${escA(c.ai.base)}">
+    <label for="ai_model">Model</label><input class="mono" id="ai_model" value="${escA(c.ai.model)}">
+    <label for="ai_key">API key <span style="color:var(--muted);font-weight:400">(blank for local Ollama)</span></label> <input class="mono" id="ai_key" type="password" autocomplete="off" value="${escA(c.ai.key)}">
+    <div class="hint" style="color:var(--warn)">A key entered here is visible in the browser. Fine for local/self-run use; for a public site, proxy AI calls through a server.</div>
+    <div class="save-row"><button class="btn btn-blood" onclick="saveAI()">Save AI</button><button class="btn btn-ghost" onclick="testAI()">Test connection</button><span class="saved-flash" id="flashAI" role="status"></span></div></div>
+  <div class="panel oform"><h4>Open connectors <span style="color:var(--muted);font-weight:400;font-size:13px">(optional)</span></h4><p class="sub">Webhooks fired when an enquiry arrives — point at Cal.com, n8n, or your own API.</p>
+    <label for="c_booking">Booking webhook URL</label><input class="mono" id="c_booking" value="${escA(c.bookingWebhook)}" placeholder="https://…">
+    <label for="c_notify">Notification webhook URL</label><input class="mono" id="c_notify" value="${escA(c.notifyWebhook)}" placeholder="https://…">
+    <div class="save-row"><button class="btn btn-blood" onclick="saveConnectors()">Save connectors</button><span class="saved-flash" id="flashC">Saved ✓</span></div></div>
+  <div class="panel oform"><h4>Access</h4><label for="c_pass">Office passcode</label><input id="c_pass" value="${escA(c.passcode)}"><div class="hint">Client-side gate only. Real security needs the Supabase backend login.</div>
+    <div class="save-row"><button class="btn btn-blood" onclick="savePass()">Update passcode</button><span class="saved-flash" id="flashPW">Saved ✓</span></div></div>`;
+}
+function applyPreset(k){const pr=AI_PRESETS[k];if(!pr)return;document.getElementById('ai_base').value=pr.base;document.getElementById('ai_model').value=pr.model;document.getElementById('ai_key').value=pr.key;document.getElementById('ai_note').textContent=pr.note;}
+function saveAI(){const c=cfg();c.ai={preset:document.getElementById('ai_preset').value,base:document.getElementById('ai_base').value.trim(),model:document.getElementById('ai_model').value.trim(),key:document.getElementById('ai_key').value.trim(),temperature:c.ai.temperature!=null?c.ai.temperature:0.4};DB.set('cfg',c);flash('flashAI','Saved ✓');}
+async function testAI(){saveAI();const el=document.getElementById('flashAI');el.textContent='Testing…';el.classList.add('show');try{const out=await askQwen("You are a connection test. Reply with the single word: ok.",[{role:'user',content:'test'}]);el.textContent=out?'Connected ✓':'Reached, empty reply';}catch(e){el.textContent=e.message==='no-endpoint'?'No endpoint set':'Failed: '+e.message+' (CORS or unreachable)';}}
+function saveConnectors(){const c=cfg();c.bookingWebhook=document.getElementById('c_booking').value.trim();c.notifyWebhook=document.getElementById('c_notify').value.trim();DB.set('cfg',c);flash('flashC');}
+function savePass(){const c=cfg();const v=document.getElementById('c_pass').value.trim();if(v){c.passcode=v;DB.set('cfg',c);flash('flashPW');}}
+const CHECKLIST=[
+  {k:'pii',t:'Professional indemnity insurance in place',d:'Cover appropriate to McKenzie-friend / case-preparation work.'},
+  {k:'ico',t:'Registered with the ICO (data protection fee paid)',d:'You handle sensitive personal data — registration and a lawful basis are needed.'},
+  {k:'terms',t:'Written client-care terms given to each client',d:'Scope, fees, what you do and do not do, complaints route.'},
+  {k:'complaints',t:'Complaints procedure published',d:'A clear route if a client is unhappy.'},
+  {k:'reserved',t:'No reserved activities offered',d:'No rights of audience or conduct of litigation held out as a service.'},
+  {k:'immig',t:'No immigration advice given',d:'Immigration matters referred to an IAA-regulated adviser.'},
+  {k:'data',t:'Case data stored securely',d:'For production, a Supabase backend with a retention/erasure policy — not just a browser.'},
+  {k:'society',t:'Aligned to a McKenzie-friend code of conduct (optional)',d:'e.g. the Society of Professional McKenzie Friends — a voluntary trust signal.'}
+];
+function oCompliance(p){const done=DB.get('compliance',{});const n=CHECKLIST.filter(i=>done[i.k]).length;
+  p.innerHTML=`<div class="panel"><h4>Compliance checklist <span class="badge ${n===CHECKLIST.length?'on':'off'}">${n}/${CHECKLIST.length}</span></h4><p class="sub">Your operational small print in one place. A working aid, not legal advice.</p>
+    ${CHECKLIST.map(i=>`<button type="button" role="checkbox" aria-checked="${done[i.k]?'true':'false'}" class="check-item ${done[i.k]?'done':''}" onclick="toggleCheck('${i.k}')"><span class="check-box" aria-hidden="true">${done[i.k]?'✓':''}</span><span><span class="ct" style="display:block">${esc(i.t)}</span><span class="cd" style="display:block">${esc(i.d)}</span></span></button>`).join('')}</div>`;}
+function toggleCheck(k){const d=DB.get('compliance',{});d[k]=!d[k];DB.set('compliance',d);paint();}
+
+/* ================= UTILS ================= */
+function exportData(key){const data=DB.get(key,[]);const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mckenzie-'+key+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function flash(id,txt){const el=document.getElementById(id);if(!el)return;if(txt)el.textContent=txt;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1600);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escA(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(s){return esc(s).split(/\n{2,}/).map(p=>`<p>${p.replace(/\n/g,'<br>')}</p>`).join('');}
+
+/* ================= BOOT ================= */
+if(!location.hash)location.hash='#/home';
+render();
+function netState(){document.body.classList.toggle('offline',!navigator.onLine);}
+window.addEventListener('online',netState);window.addEventListener('offline',netState);netState();
+if('serviceWorker' in navigator && location.protocol!=='file:'){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+</script>
+</body>
+</html>

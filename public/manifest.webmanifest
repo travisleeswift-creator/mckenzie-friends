@@ -1,0 +1,19 @@
+{
+  "name": "McKenzie Friends — Court Support",
+  "short_name": "McKenzie Friends",
+  "description": "Court support and case preparation for litigants in person in England & Wales, with Travis Lee Swift.",
+  "id": "./",
+  "start_url": "./#/home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e9eae4",
+  "theme_color": "#16202e",
+  "lang": "en-GB",
+  "categories": ["productivity", "education"],
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
